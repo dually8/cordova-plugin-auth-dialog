@@ -16,6 +16,7 @@
 @property NSString *callbackId;
 
 - (void)authenticate:(CDVInvokedUrlCommand*)command;
+- (void)clearCredentials:(CDVInvokedUrlCommand*)command;
 
 @end
 
@@ -27,5 +28,6 @@ typedef void (^CredentialsViewCallback)(NSString* userName, NSString* password, 
 @property (copy) CredentialsViewCallback onResult;
 
 - (void) requestUserCredentials: (NSString*) uri;
+- (void) alertView:(UIAlertView *)alertView didDismissWithButtonIndex:(NSInteger)buttonIndex;
 
 @end

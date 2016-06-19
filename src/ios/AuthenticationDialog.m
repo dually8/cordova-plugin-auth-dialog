@@ -16,6 +16,8 @@
     
     self.callbackId = command.callbackId;
     
+    //    [self clearCreds];
+    
     NSLog(@"AuthDialog: authenticate %@", self.uri);
     
     // large timeout is used so that we have enough time to request user name and password
@@ -32,6 +34,43 @@
     NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration] delegate:self delegateQueue:[NSOperationQueue currentQueue]];
     NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request];
     [dataTask resume];
+}
+
+
+- (void)clearCredentials:(CDVInvokedUrlCommand*)command
+{
+    NSLog(@"CLEARING CREDS! WOO!");
+    //     self.callbackId = command.callbackId;
+    CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self clearCreds];
+    //     [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK] callbackId:self.callbackId];
+    [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    
+}
+
+- (void)clearCreds
+{
+    // reset the credentials cache...
+    NSDictionary *credentialsDict = [[NSURLCredentialStorage sharedCredentialStorage] allCredentials];
+    
+    if ([credentialsDict count] > 0) {
+        // the credentialsDict has NSURLProtectionSpace objs as keys and dicts of userName => NSURLCredential
+        NSEnumerator *protectionSpaceEnumerator = [credentialsDict keyEnumerator];
+        id urlProtectionSpace;
+        
+        // iterate over all NSURLProtectionSpaces
+        while (urlProtectionSpace = [protectionSpaceEnumerator nextObject]) {
+            NSEnumerator *userNameEnumerator = [[credentialsDict objectForKey:urlProtectionSpace] keyEnumerator];
+            id userName;
+            
+            // iterate over all usernames for this protectionspace, which are the keys for the actual NSURLCredentials
+            while (userName = [userNameEnumerator nextObject]) {
+                NSURLCredential *cred = [[credentialsDict objectForKey:urlProtectionSpace] objectForKey:userName];
+                NSLog(@"cred to be removed: %@", cred);
+                [[NSURLCredentialStorage sharedCredentialStorage] removeCredential:cred forProtectionSpace:urlProtectionSpace];
+            }
+        }
+    }
 }
 
 - (void) URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler
@@ -130,42 +169,68 @@ CredentialsViewController * credentialsViewController;
 
 - (void) requestUserCredentials: (NSString*) uri
 {
+    // TODO consider using UIAlertController (available starting from iOS 8.0)
+    UIAlertView* view = [[UIAlertView alloc] initWithTitle:@"Authentication Required"
+                                                   message: uri
+                                                  delegate: self
+                                         cancelButtonTitle:@"Cancel"
+                                         otherButtonTitles:nil];
+    
+    view.alertViewStyle = UIAlertViewStyleLoginAndPasswordInput;
+    
+    [view addButtonWithTitle:@"Log In"];
+    
+    [view show];
     // UIAlertController
-    UIAlertController *alertController = [UIAlertController
-                                          alertControllerWithTitle:@"Authentication Required"
-                                          message:uri
-                                          preferredStyle:UIAlertControllerStyleAlert];
-    [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField){
-        textField.placeholder = NSLocalizedString(@"LoginPlaceholder", @"Username");
-    }];
-    [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField){
-        textField.placeholder = NSLocalizedString(@"PasswordPlaceholder", @"Password");
-        textField.secureTextEntry = YES;
-    }];
-    UIAlertAction *cancelAction = [UIAlertAction
-                                   actionWithTitle:NSLocalizedString(@"Cancel", @"Cancel action")
-                                   style:UIAlertActionStyleCancel
-                                   handler:^(UIAlertAction *action)
-                                   {
-                                       self.onResult(NULL, NULL, true);
-                                       return;
-                                   }];
+    //    UIAlertController *alertController = [UIAlertController
+    //                                          alertControllerWithTitle:@"Authentication Required"
+    //                                          message:uri
+    //                                          preferredStyle:UIAlertControllerStyleAlert];
+    //    [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField){
+    //        textField.placeholder = NSLocalizedString(@"LoginPlaceholder", @"Username");
+    //    }];
+    //    [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField){
+    //        textField.placeholder = NSLocalizedString(@"PasswordPlaceholder", @"Password");
+    //        textField.secureTextEntry = YES;
+    //    }];
+    //    UIAlertAction *cancelAction = [UIAlertAction
+    //                                   actionWithTitle:NSLocalizedString(@"Cancel", @"Cancel action")
+    //                                   style:UIAlertActionStyleCancel
+    //                                   handler:^(UIAlertAction *action)
+    //                                   {
+    //                                       self.onResult(NULL, NULL, true);
+    //                                       return;
+    //                                   }];
+    //    
+    //    UIAlertAction *okAction = [UIAlertAction
+    //                               actionWithTitle:NSLocalizedString(@"OK", @"OK action")
+    //                               style:UIAlertActionStyleDefault
+    //                               handler:^(UIAlertAction *action)
+    //                               {
+    //                                   UITextField *username = alertController.textFields.firstObject;
+    //                                   UITextField *password = alertController.textFields.lastObject;
+    //                                   
+    //                                   self.onResult(username.text, password.text, false);
+    //                                   
+    //                               }];
+    //    
+    //    [alertController addAction:cancelAction];
+    //    [alertController addAction:okAction];
+    //    [self presentViewController:alertController animated:YES completion:nil];
+}
+
+- (void)alertView:(UIAlertView *)alertView didDismissWithButtonIndex:(NSInteger)buttonIndex
+{
+    if (buttonIndex == 0) // cancelled
+    {
+        self.onResult(NULL, NULL, true);
+        return;
+    }
     
-    UIAlertAction *okAction = [UIAlertAction
-                               actionWithTitle:NSLocalizedString(@"OK", @"OK action")
-                               style:UIAlertActionStyleDefault
-                               handler:^(UIAlertAction *action)
-                               {
-                                   UITextField *username = alertController.textFields.firstObject;
-                                   UITextField *password = alertController.textFields.lastObject;
-                                   
-                                   self.onResult(username.text, password.text, false);
-                                   
-                               }];
+    UITextField *username = [alertView textFieldAtIndex:0];
+    UITextField *password = [alertView textFieldAtIndex:1];
     
-    [alertController addAction:cancelAction];
-    [alertController addAction:okAction];
-    [self presentViewController:alertController animated:YES completion:nil];
+    self.onResult(username.text, password.text, false);
 }
 
 @end
